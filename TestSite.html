@@ -134,12 +134,12 @@
       let contours = turf.isobands(pointGrid, breaks, {zProperty: "cost"});
       addContourLayers("contours", contours, colors);
 
-      // let idwPointGrid = turf.interpolate(dataPoints, interpolateDist, {
-      //   gridType: 'points', property: 'cost', units: 'kilometers', weight: interpolateWeight
-      // });
-      // addPointsLayer("gridPoints", idwPointGrid, 2, false);
-      // let idwContours = turf.isobands(idwPointGrid, breaks, {zProperty: "cost"});
-      // addContourLayers("idwContours", idwContours, idwColors);
+      let idwPointGrid = turf.interpolate(dataPoints, interpolateDist, {
+        gridType: 'points', property: 'cost', units: 'kilometers', weight: interpolateWeight
+      });
+      addPointsLayer("gridPoints", idwPointGrid, 2, false);
+      let idwContours = turf.isobands(idwPointGrid, breaks, {zProperty: "cost"});
+      addContourLayers("idwContours", idwContours, idwColors);
     }
 
     /**
