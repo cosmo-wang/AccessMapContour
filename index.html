@@ -5,7 +5,7 @@
   <link href='https://api.mapbox.com/mapbox-gl-js/v0.53.0/mapbox-gl.css' rel='stylesheet' />
   <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
   <script src="https://unpkg.com/rbush@2.0.1/rbush.js"></script>
-  <script src="contour.js"></script>
+  <script src="index.js"></script>
 </head>
 <body>
   <style>
@@ -87,36 +87,6 @@
       .then(drawContours);
   });
 
-  let toggleableLayerIds = [ 'routes', 'dataPoints', 'interpolatedPoints', 'triangles', 'hull', 'pointGrid' ];
-
-  for (let i = 0; i < toggleableLayerIds.length; i++) {
-    let id = toggleableLayerIds[i];
-    
-    let link = document.createElement('a');
-    link.href = '#';
-    link.className = 'inactive';
-    link.textContent = id;
-    
-    link.onclick = function (e) {
-      let clickedLayer = this.textContent;
-      e.preventDefault();
-      e.stopPropagation();
-      
-      let visibility = map.getLayoutProperty(clickedLayer, 'visibility');
-      
-      if (visibility === 'visible') {
-        map.setLayoutProperty(clickedLayer, 'visibility', 'none');
-        this.className = '';
-      } else {
-        this.className = 'active';
-        map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
-      }
-    };
-    
-    let layers = document.getElementById('menu');
-    layers.appendChild(link);
-  }
-
   /***********************************************/
   /**************** MAP FUNCTIONS ****************/
   /***********************************************/
@@ -186,7 +156,7 @@
 
     // let contours = turf.isobands(pointGrid, breaks, {zProperty: "cost"});
 
-    let contours = generateContours(dataPoints.node_costs, dataPoints.edges, "cost", breaks, maxCost);
+    let contours = generateContours(dataPoints.node_costs, "cost", breaks, maxCost);
     addContourLayers("contours", contours, colors);
   }
 
@@ -274,6 +244,62 @@
       map.setLayoutProperty(id, 'visibility', 'none');
     }
   }
+
+  /**
+   * Returns n evenly spaced samples,
+   * calculated over the interval [start, stop].
+   * @param {number} start The starting value of the sequence.
+   * @param {number} stop The end value of the sequence
+   * @param {number} n optional, Number of samples to generate.
+   * @return The n equally spaced samples in 
+   *         the closed interval [start, stop].
+   */
+  function linspace(start, stop, n) {
+    if (typeof n === "undefined") {
+      n = Math.max(Math.round(stop-start)+1,1);
+    }
+    if (n < 2) {
+      return n === 1 ? [start] : []; 
+    }
+    let i, ret = Array(n);
+    n--;
+    for (i = n; i >= 0; i--) {
+      ret[i] = (i * stop + (n - i) * start) / n;
+    }
+    ret = ret.map(p => Math.round(p));
+    return ret;
+  }
+
+  let toggleableLayerIds = [ 'routes', 'dataPoints', 'interpolatedPoints', 'triangles', 'hull', 'pointGrid' ];
+
+  for (let i = 0; i < toggleableLayerIds.length; i++) {
+    let id = toggleableLayerIds[i];
+    
+    let link = document.createElement('a');
+    link.href = '#';
+    link.className = 'inactive';
+    link.textContent = id;
+    
+    link.onclick = function (e) {
+      let clickedLayer = this.textContent;
+      e.preventDefault();
+      e.stopPropagation();
+      
+      let visibility = map.getLayoutProperty(clickedLayer, 'visibility');
+      
+      if (visibility === 'visible') {
+        map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+        this.className = '';
+      } else {
+        this.className = 'active';
+        map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+      }
+    };
+    
+    let layers = document.getElementById('menu');
+    layers.appendChild(link);
+  }
+
   </script>
 </body>
 </html>
