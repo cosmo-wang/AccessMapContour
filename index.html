@@ -5,7 +5,7 @@
   <link href='https://api.mapbox.com/mapbox-gl-js/v0.53.0/mapbox-gl.css' rel='stylesheet' />
   <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
   <script src="https://unpkg.com/rbush@2.0.1/rbush.js"></script>
-  <script src="index.js"></script>
+  <script src="contour.js"></script>
 </head>
 <body>
   <style>
@@ -54,5 +54,226 @@
     
   <nav id="menu"></nav>
   <div style="width: 100%; height: 100%" id="map"></div>
+  <script>
+  const maxCost = 301;
+  const breaks = linspace(0, maxCost - 1, 7);
+  console.log(breaks);
+  const colors = ["#08306b", "#08519c", "#2171b5", "#4292c6", "#6baed6", "#9ecae1", "#c6dbef"];
+  const interpolateDist = 0.005;
+  const interpolateWeight = 3;
+  let marker = null;
+  
+  mapboxgl.accessToken = 'pk.eyJ1IjoiY29zbW93YW5nIiwiYSI6ImNqdWl0bG50ODFlZ2w0ZnBnc3VyejZmbWQifQ.5TjxQgPSj6B7VcFkvSfqBA';
+  // add the map to the page
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/light-v10',
+    center: [-122.3155224, 47.6583362],
+    zoom: 15
+  });
+  // add a marker on the map when clicked
+  // draw the cost contour around the clicked point
+  map.on('click', function(loc){
+    let lng = loc.lngLat["lng"];
+    let lat = loc.lngLat["lat"];
+    if (marker != null) {
+      marker.remove();
+    }
+    marker = addMarker(lng, lat);
+    let url = "http://localhost:8000/reachable/default.json?lon=" + lng 
+              + "&lat=" + lat + "&maxCost=" + maxCost;
+    fetch(url)
+      .then(res => res.json())
+      .then(drawContours);
+  });
+
+  let toggleableLayerIds = [ 'routes', 'dataPoints', 'interpolatedPoints', 'triangles', 'hull', 'pointGrid' ];
+
+  for (let i = 0; i < toggleableLayerIds.length; i++) {
+    let id = toggleableLayerIds[i];
+    
+    let link = document.createElement('a');
+    link.href = '#';
+    link.className = 'inactive';
+    link.textContent = id;
+    
+    link.onclick = function (e) {
+      let clickedLayer = this.textContent;
+      e.preventDefault();
+      e.stopPropagation();
+      
+      let visibility = map.getLayoutProperty(clickedLayer, 'visibility');
+      
+      if (visibility === 'visible') {
+        map.setLayoutProperty(clickedLayer, 'visibility', 'none');
+        this.className = '';
+      } else {
+        this.className = 'active';
+        map.setLayoutProperty(clickedLayer, 'visibility', 'visible');
+      }
+    };
+    
+    let layers = document.getElementById('menu');
+    layers.appendChild(link);
+  }
+
+  /***********************************************/
+  /**************** MAP FUNCTIONS ****************/
+  /***********************************************/
+
+  /**
+   * Adds a Mapbox Marker at given longitude and latitude.
+   * @param {double} lng - longitude of the position
+   * @param {double} lat - latitude of the position
+   * @return - A Mapbox Marker at the given position
+   */
+  function addMarker(lng, lat) {
+    return new mapboxgl.Marker()
+              .setLngLat([lng, lat])
+              .setDraggable(false)
+              .addTo(map);
+  }
+
+  function addRoutes(data) {
+    if (map.getLayer("routes")) {
+        map.removeLayer("routes");
+        map.removeSource("routes");
+      }
+    map.addLayer({
+      "id": "routes",
+      "type": "line",
+      "source": {
+        "type": "geojson",
+        "data": data.edges
+      },
+      "layout": {
+        "line-join": "round",
+        "line-cap": "round"
+      },
+      "paint": {
+        "line-color": "#888",
+        "line-width": 8
+      }
+    });
+    map.setLayoutProperty("routes", 'visibility', 'none');
+    return data;
+  }
+
+  /**
+   * Draws contours starting from a origin based on given data points.
+   * @param {GeoJSON} dataPoints - A feature collection of points with 
+   *                               a property cost represents the cost 
+   *                               of getting to the point from origin
+   */
+  function drawContours(dataPoints) {
+    addRoutes(dataPoints);
+
+    // add the data points layer
+    // addPointsLayer("dataPoints", dataPoints.node_costs, 7, false);
+
+    // let interpolatedPoints = triangleInterpolate(dataPoints.node_costs, preInterlopate(dataPoints), maxCost);
+
+    // addPointsLayer("interpolatedPoints", interpolatedPoints, 5, false);
+
+    // addTriangles("triangles", turf.tin(interpolatedPoints, "cost"), false);
+
+    // let pointGrid = turf.pointGrid(turf.bbox(dataPoints.node_costs), interpolateDist);
+    // pointGrid = triangleInterpolate(interpolatedPoints, pointGrid, maxCost);
+
+    // pointGrid.features = pointGrid.features.filter(p => p.properties.cost);
+
+    // addPointsLayer("pointGrid", pointGrid, 2, false);
+
+    // let contours = turf.isobands(pointGrid, breaks, {zProperty: "cost"});
+
+    let contours = generateContours(dataPoints.node_costs, dataPoints.edges, "cost", breaks, maxCost);
+    addContourLayers("contours", contours, colors);
+  }
+
+  /**
+   * Add several layers of contours to the map with given id,
+   * using the contour source and colors given.
+   * @param {string} id - id of the contour, each layer of the contour
+   *                      has id in the form "id + i", where i is an int
+   * @param {string[]} colors - colors for each layer of the contour
+   */
+  function addContourLayers(id, source, colors) {
+    for (let i = 0; i < source.features.length; i++) {
+      let layerID = id + i;
+      if (map.getLayer(layerID)) {
+        map.removeLayer(layerID);
+        map.removeSource(layerID);
+      }
+      map.addLayer({
+        "id": layerID,
+        "type": "fill",
+        "source": {
+          "type": "geojson",
+          "data": source.features[i]
+        },
+        "paint": {
+          "fill-color": colors[i],
+          "fill-opacity": 0.5
+        }
+      });
+    }
+  }
+
+  function addTriangles(id, source, visible) {
+    if (map.getLayer(id)) {
+      map.removeLayer(id);
+      map.removeSource(id);
+    }
+    map.addLayer({
+      "id": id,
+      "type": "line",
+      "source": {
+        "type": "geojson",
+        "data": source
+      }
+    });
+    if (!visible) {
+      map.setLayoutProperty(id, 'visibility', 'none');
+    }
+  }
+
+  function addPointsLayer(id, source, pointRadius, visible) {
+    if (map.getLayer(id)) {
+      map.removeLayer(id);
+      map.removeSource(id);
+    }
+    map.addLayer({
+      "id": id,
+      "type": "circle",
+      "source": {
+        "type": "geojson",
+        "data": source
+      },
+      "paint": {
+        "circle-radius": pointRadius,
+        "circle-color": [
+          "case",
+          [">=", ["get", "cost"], maxCost],
+          "red",
+          [
+            "interpolate",
+            ["linear"],
+            ["get", "cost"],
+            0, "#08306b",
+            50, "#08519c",
+            100, "#2171b5",
+            150, "#4292c6",
+            200, "#6baed6",
+            250, "#9ecae1",
+            300, "#c6dbef"
+          ]
+        ]
+      }
+    });
+    if (!visible) {
+      map.setLayoutProperty(id, 'visibility', 'none');
+    }
+  }
+  </script>
 </body>
 </html>
