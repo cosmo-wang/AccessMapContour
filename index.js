@@ -8,7 +8,7 @@ window.onload = function() {
   const interpolateWeight = 3;
   let marker = null;
   class MyRBush extends rbush {
-    toBBox(trig) { 
+    toBBox(trig) {
       let bbox = turf.bbox(trig);
       return {
         minX: bbox[0],
@@ -374,13 +374,13 @@ window.onload = function() {
     addRoutes(dataPoints);
 
     // add the data points layer
-    addPointsLayer("dataPoints", dataPoints.node_costs, 7, false);
+    addPointsLayer("dataPoints", dataPoints.node_costs, 10, false);
 
     let interpolatedPoints = triangleInterpolate(dataPoints.node_costs, preInterlopate(dataPoints));
 
-    addPointsLayer("interpolatedPoints", interpolatedPoints, 5, false);
-
     addTriangles("triangles", turf.tin(interpolatedPoints, "cost"), false);
+
+    addPointsLayer("interpolatedPoints", interpolatedPoints, 5, false);
 
     let pointGrid = turf.pointGrid(turf.bbox(dataPoints.node_costs), interpolateDist);
     pointGrid = triangleInterpolate(interpolatedPoints, pointGrid);
@@ -390,7 +390,7 @@ window.onload = function() {
     addPointsLayer("pointGrid", pointGrid, 2, false);
 
     let contours = turf.isobands(pointGrid, breaks, {zProperty: "cost"});
-    addContourLayers("contours", contours, colors);
+    // addContourLayers("contours", contours, colors);
     console.timeEnd("timer");
   }
 
@@ -478,57 +478,4 @@ window.onload = function() {
       map.setLayoutProperty(id, 'visibility', 'none');
     }
   }
-
-  /***********************************************/
-  /************ KRIGING INTERPOLATION ************/
-  /***********************************************/
-
-  /**
-   * Interpolate and produce a point grid based on given
-   * data points using kriging algorithm.
-   *     http://oeo4b.github.io 
-   * @param {GeoJSON} data: a feature collection of points
-   *                        with a property cost
-   * @param {double} inerpolateDist:
-   *                 the distance between each grid point
-   * @return - A point grid in GeoJSON format
-   */
-  function krigingInterpolate(data, interpolateDist) {
-    // const dataBbox = turf.bbox(data);
-    // const bufferDist = 1e-3;
-    // const bufferedBbox = [
-    //   dataBbox[0] - bufferDist,
-    //   dataBbox[1] - bufferDist,
-    //   dataBbox[2] + bufferDist,
-    //   dataBbox[3] + bufferDist
-    // ];
-    let hull = turf.convex(data);
-    let pointGrid = turf.pointGrid(turf.bbox(data), interpolateDist);
-    
-    let xs = [];
-    let ys = [];
-    let zs = [];
-    turf.featureEach(data, function(dataPoint) {
-      xs.push(dataPoint.geometry.coordinates[1]);
-      ys.push(dataPoint.geometry.coordinates[0]);
-      zs.push(dataPoint.properties.cost);
-    });
-
-    let model = "spherical";
-    let sigma2 = 0;
-    let alpha = 1e-10;
-    let fitModel = kriging.train(zs, xs, ys, model, sigma2, alpha);
-
-    turf.featureEach(pointGrid, function(gridPoint) {
-      if (!turf.booleanPointInPolygon(gridPoint, hull)) {
-        gridPoint.properties.cost = 300;
-      } else {
-        let x = gridPoint.geometry.coordinates[1];
-        let y = gridPoint.geometry.coordinates[0];
-        gridPoint.properties.cost = kriging.predict(x, y, fitModel);
-      }
-    });
-    return pointGrid;
-  }
-
 };
